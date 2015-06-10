@@ -11,6 +11,13 @@ func TestConvertHexToBase64(t *testing.T) {
 	}
 	assertEqual(t, "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t", s)
 }
+
+func TestFixedXOR(t *testing.T) {
+	out, err := FixedXOR("1c0111001f010100061a024b53535009181c", "686974207468652062756c6c277320657965")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEqual(t, "746865206b696420646f6e277420706c6179", out)
 }
 
 func assertEqual(t *testing.T, expected, actual interface{}) {
