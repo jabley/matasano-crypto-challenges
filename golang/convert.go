@@ -39,3 +39,34 @@ func XORBytes(dst, a, b []byte) int {
 	}
 	return n
 }
+
+func SingleByteXORCipher(encrypted string) (string, error) {
+	a, err := hex.DecodeString(encrypted)
+	if err != nil {
+		return "", err
+	}
+	dst := make([]byte, len(a))
+	decrypted := encrypted
+	bestScore := 0
+
+	for guess := 0; guess < 255; guess++ {
+		xor(dst, a, byte(guess))
+
+		score := scoreText(dst)
+
+		if score > bestScore {
+			// fmt.Printf("Got new best score: %v for %v\n", score, string(dst))
+			bestScore = score
+			decrypted = string(dst)
+		}
+	}
+
+	return decrypted, nil
+}
+
+func xor(dst, a []byte, b byte) {
+	n := len(a)
+	for i := 0; i < n; i++ {
+		dst[i] = a[i] ^ b
+	}
+}

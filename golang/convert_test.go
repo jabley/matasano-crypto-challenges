@@ -20,6 +20,14 @@ func TestFixedXOR(t *testing.T) {
 	assertEqual(t, "746865206b696420646f6e277420706c6179", out)
 }
 
+func TestSingleByteXORCipher(t *testing.T) {
+	out, err := SingleByteXORCipher("1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEqual(t, "Cooking MC's like a pound of bacon", out)
+}
+
 func assertEqual(t *testing.T, expected, actual interface{}) {
 	if actual != expected {
 		t.Fatalf("Expected %q: Actual: %q\n", expected, actual)
