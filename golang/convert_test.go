@@ -28,6 +28,14 @@ func TestSingleByteXORCipher(t *testing.T) {
 	assertEqual(t, "Cooking MC's like a pound of bacon", out)
 }
 
+func TestFileOfXORedContent(t *testing.T) {
+	out, err := Challenge4()
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertEqual(t, "Now that the party is jumping\n", out)
+}
+
 func assertEqual(t *testing.T, expected, actual interface{}) {
 	if actual != expected {
 		t.Fatalf("Expected %q: Actual: %q\n", expected, actual)

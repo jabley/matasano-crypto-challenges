@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"encoding/base64"
 	"encoding/hex"
 	"math"
+	"os"
 )
 
 func Hex2Base64(hexBytes string) (string, error) {
@@ -61,6 +63,35 @@ func SingleByteXORCipher(encrypted string) (string, error) {
 		}
 	}
 
+	return decrypted, nil
+}
+
+func Challenge4() (string, error) {
+	file, err := os.Open("../inputs/4.txt") // For read access.
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	bestScore := 0
+	decrypted := ""
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		candidate, err := SingleByteXORCipher(scanner.Text())
+		if err != nil {
+			return "", err
+		}
+
+		score := scoreText([]byte(candidate))
+
+		if score > bestScore {
+			bestScore = score
+			decrypted = candidate
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
 	return decrypted, nil
 }
 
