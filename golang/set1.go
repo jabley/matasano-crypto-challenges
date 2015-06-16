@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/base64"
 	"encoding/hex"
-	"math"
 	"os"
 )
 
@@ -26,20 +25,15 @@ func FixedXOR(first, second string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dst := make([]byte, int(math.Max(float64(len(a)), float64(len(b)))))
-	XORBytes(dst, a, b)
-	return hex.EncodeToString(dst), nil
-}
-
-func XORBytes(dst, a, b []byte) int {
-	n := len(a)
-	if len(b) < n {
+	var n int
+	if len(a) > len(b) {
+		n = len(a)
+	} else {
 		n = len(b)
 	}
-	for i := 0; i < n; i++ {
-		dst[i] = a[i] ^ b[i]
-	}
-	return n
+	dst := make([]byte, n)
+	xor(dst, a, b)
+	return hex.EncodeToString(dst), nil
 }
 
 func SingleByteXORCipher(encrypted string) (string, error) {
@@ -52,7 +46,7 @@ func SingleByteXORCipher(encrypted string) (string, error) {
 	bestScore := 0
 
 	for guess := 0; guess < 255; guess++ {
-		xor(dst, a, byte(guess))
+		xor(dst, a, []byte{byte(guess)})
 
 		score := scoreText(dst)
 
@@ -95,9 +89,19 @@ func Challenge4() (string, error) {
 	return decrypted, nil
 }
 
-func xor(dst, a []byte, b byte) {
+func Challenge5() (string, error) {
+	in := "Burning 'em, if you ain't quick and nimble\nI go crazy when I hear a cymbal"
+	a := []byte(in)
+	dst := make([]byte, len(a))
+	b := []byte{'I', 'C', 'E'}
+	xor(dst, a, b)
+	return hex.EncodeToString(dst), nil
+}
+
+func xor(dst, a []byte, b []byte) {
 	n := len(a)
+	m := len(b)
 	for i := 0; i < n; i++ {
-		dst[i] = a[i] ^ b
+		dst[i] = a[i] ^ b[i%m]
 	}
 }
