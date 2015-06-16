@@ -1,6 +1,8 @@
 package main
 
 import (
+	"io/ioutil"
+	"reflect"
 	"testing"
 )
 
@@ -46,8 +48,46 @@ func TestChallenge5(t *testing.T) {
 		"2027630c692b20283165286326302e27282f", out)
 }
 
+func TestHammingDistance(t *testing.T) {
+	assertEqual(t, 37, HammingDistance("this is a test", "wokka wokka!!!"))
+}
+
+func TestTransposeRequiringPadding(t *testing.T) {
+	out, length := transpose([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, 5)
+	assertEqual(t, 4, length)
+	assertEqual(t, []byte{1, 6, 11, 16, 2, 7, 12, 17, 3, 8, 13, 0, 4, 9, 14, 0, 5, 10, 15, 0}, out)
+	out, length = transpose(out, length)
+	assertEqual(t, 5, length)
+	assertEqual(t, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 0, 0, 0}, out)
+}
+
+func TestTransposeWithoutPadding(t *testing.T) {
+	out, length := transpose([]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, 7)
+	assertEqual(t, 2, length)
+	assertEqual(t, []byte{1, 8, 2, 9, 3, 10, 4, 11, 5, 12, 6, 13, 7, 14}, out)
+	out, length = transpose(out, length)
+	assertEqual(t, 7, length)
+	assertEqual(t, []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, out)
+}
+
+func TestChallenge6(t *testing.T) {
+	out, err := Challenge6()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := ioutil.ReadFile("../outputs/6.txt")
+	assertEqual(t, string(expected), out)
+}
+
 func assertEqual(t *testing.T, expected, actual interface{}) {
-	if actual != expected {
+	if expected == nil || actual == nil {
+
+		if actual != expected {
+			t.Fatalf("Expected %q: Actual: %q\n", expected, actual)
+		}
+		return
+	}
+	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("Expected %q: Actual: %q\n", expected, actual)
 	}
 }
