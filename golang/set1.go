@@ -39,8 +39,8 @@ func FixedXOR(first, second string) (string, error) {
 	return hex.EncodeToString(dst), nil
 }
 
-func SingleByteXORCipher(encrypted string) (string, error) {
-	a, err := hex.DecodeString(encrypted)
+func SingleByteXORCipher(hexBytes []byte) (string, error) {
+	a, err := decodeHex(hexBytes)
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +78,7 @@ func Challenge4() (string, error) {
 	decrypted := ""
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		candidate, err := SingleByteXORCipher(scanner.Text())
+		candidate, err := SingleByteXORCipher(scanner.Bytes())
 		if err != nil {
 			return "", err
 		}
