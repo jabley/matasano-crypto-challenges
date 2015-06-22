@@ -79,6 +79,15 @@ func TestChallenge6(t *testing.T) {
 	assertEqual(t, string(expected), out)
 }
 
+func TestChallenge7(t *testing.T) {
+	out, err := Challenge7()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := ioutil.ReadFile("../outputs/6.txt")
+	assertEqual(t, string(expected), out)
+}
+
 func assertEqual(t *testing.T, expected, actual interface{}) {
 	if expected == nil || actual == nil {
 

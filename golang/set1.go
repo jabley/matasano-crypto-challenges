@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/aes"
 	"encoding/base64"
 	"encoding/hex"
 	"io/ioutil"
@@ -132,6 +133,50 @@ func Challenge6() (res string, err error) {
 	}
 
 	return string(decode(rawCipher)), nil
+}
+
+func Challenge7() (res string, err error) {
+	rawCipher, err := readBase64Input("../inputs/7.txt")
+
+	if err != nil {
+		return
+	}
+
+	return string(decodeAES(rawCipher, []byte("YELLOW SUBMARINE"))), nil
+}
+
+func decodeAES(cipher []byte, key []byte) []byte {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+
+	bs := block.BlockSize()
+	if len(cipher)%bs != 0 {
+		panic("Need a multiple of the blocksize")
+	}
+
+	plainText := make([]byte, 0)
+	buf := make([]byte, bs)
+
+	for len(cipher) > 0 {
+		block.Decrypt(buf, cipher)
+		cipher = cipher[bs:]
+		plainText = append(plainText, buf...)
+	}
+
+	return stripPadding(plainText)
+}
+
+func stripPadding(plainText []byte) []byte {
+	n := len(plainText)
+	paddingLength := int(plainText[n-1])
+
+	if n-paddingLength < 0 {
+		return plainText
+	}
+
+	return plainText[:n-paddingLength]
 }
 
 func readBase64Input(path string) ([]byte, error) {
