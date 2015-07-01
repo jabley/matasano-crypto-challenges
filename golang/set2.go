@@ -36,3 +36,15 @@ func Challenge10RoundTrip() (res string, err error) {
 
 	return base64.StdEncoding.EncodeToString(out), err
 }
+
+func RoundTripECB() (res string, err error) {
+	plainText, err := ioutil.ReadFile("../outputs/6.txt")
+
+	if err != nil {
+		return
+	}
+
+	out, err := encryptECB(plainText, []byte("YELLOW SUBMARINE"))
+
+	return base64.StdEncoding.EncodeToString(out), err
+}

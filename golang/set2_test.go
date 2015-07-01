@@ -39,3 +39,19 @@ func TestChallenge10RoundTrip(t *testing.T) {
 	assertEqual(t, expectedStr, out)
 }
 
+func TestRoundTripECB(t *testing.T) {
+	out, err := RoundTripECB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := ioutil.ReadFile("../inputs/7.txt")
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the base64 encoded version we generate has no \n formatting, so we trim that from the file read
+	// (which does contain \n for readability)
+	expectedStr := strings.Replace(string(expected), "\n", "", -1)
+	assertEqual(t, expectedStr, out)
+}
+
