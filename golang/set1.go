@@ -61,7 +61,7 @@ func Challenge7() (res string, err error) {
 		return
 	}
 
-	plainText, err := decryptEBC(rawCipher, []byte("YELLOW SUBMARINE"))
+	plainText, err := decryptECB(rawCipher, []byte("YELLOW SUBMARINE"))
 
 	if err != nil {
 		return
