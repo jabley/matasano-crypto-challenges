@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/aes"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -55,3 +56,10 @@ func TestRoundTripECB(t *testing.T) {
 	assertEqual(t, expectedStr, out)
 }
 
+func TestChallenge11(t *testing.T) {
+	plainText := createECBDetectingPlainText(aes.BlockSize)
+	encryptionOracle := generateEncryptionOracle()
+	cipherText, mode := encryptionOracle(plainText)
+	detectedMode := sniffEncryptionMode(cipherText)
+	assertEqual(t, mode, detectedMode)
+}
