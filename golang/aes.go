@@ -230,6 +230,7 @@ func newRandomBytes(c int) []byte {
 	return res
 }
 
+// randomBytes fills the dst byte array with a cryptographically secure sequence of bytes.
 func randomBytes(dst *[]byte) {
 	if _, err := rand.Read(*dst); err != nil {
 		panic(err)
@@ -258,8 +259,12 @@ func createECBDetectingPlainText(blockSize int) []byte {
 // plainTextFill sets each entry of the byte array to 'A'. This can be
 // useful to having a known, repeating input to a cipher function
 func plainTextFill(buf *[]byte) {
+	fillByteBuffer(buf, 'A')
+}
+
+func fillByteBuffer(buf *[]byte, b byte) {
 	res := *buf
 	for i, _ := range res {
-		res[i] = 'A'
+		res[i] = b
 	}
 }

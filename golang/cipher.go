@@ -140,6 +140,8 @@ func makeTargetBlocks(n int, blockLength int) []byte {
 	return make([]byte, n+padding)
 }
 
+// transposeBlockLength returns the number of blocks of the specified
+// length blockLength required to hold the specified array size n.
 func transposeBlockLength(n int, blockLength int) int {
 	if n%blockLength == 0 {
 		return n / blockLength
