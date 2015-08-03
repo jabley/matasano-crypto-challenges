@@ -31,13 +31,30 @@ func (m encryptionMode) String() string {
 	return encryptionModeName[m]
 }
 
-func decryptECB(cipher []byte, key []byte) ([]byte, error) {
+type BlockCipher interface {
+	decrypt(cipher []byte) ([]byte, error)
+	encrypt(plain []byte) ([]byte, error)
+}
+
+type AESECBBlockCipher struct {
+	block cipher.Block
+	err   error
+}
+
+func NewAESECBBlockCipher(key []byte) BlockCipher {
 	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
+	return &AESECBBlockCipher{
+		block: block,
+		err:   err,
+	}
+}
+
+func (c *AESECBBlockCipher) decrypt(cipher []byte) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
 	}
 
-	bs := block.BlockSize()
+	bs := c.block.BlockSize()
 	if len(cipher)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
@@ -46,7 +63,7 @@ func decryptECB(cipher []byte, key []byte) ([]byte, error) {
 	buf := make([]byte, bs)
 
 	for len(cipher) > 0 {
-		block.Decrypt(buf, cipher)
+		c.block.Decrypt(buf, cipher)
 		cipher = cipher[bs:]
 		plainText = append(plainText, buf...)
 	}
@@ -54,18 +71,62 @@ func decryptECB(cipher []byte, key []byte) ([]byte, error) {
 	return stripPadding(plainText), nil
 }
 
-func decryptCBC(cipherText []byte, key []byte, iv []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
+func (c *AESECBBlockCipher) encrypt(plainText []byte) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
+	bs := c.block.BlockSize()
+
+	plainText, err := pkcs7(plainText, bs)
+
 	if err != nil {
 		return nil, err
 	}
 
-	bs := block.BlockSize()
+	if len(plainText)%bs != 0 {
+		return nil, fmt.Errorf("Need a multiple of the blocksize")
+	}
+
+	cipherText := make([]byte, 0)
+
+	buf := make([]byte, bs)
+
+	for len(plainText) > 0 {
+		c.block.Encrypt(buf, plainText)
+		plainText = plainText[bs:]
+		cipherText = append(cipherText, buf...)
+	}
+
+	return cipherText, nil
+}
+
+type AESCBCBlockCipher struct {
+	block cipher.Block
+	iv    []byte
+	err   error
+}
+
+func NewAESCBCBlockCipher(key []byte, iv []byte) BlockCipher {
+	block, err := aes.NewCipher(key)
+	return &AESCBCBlockCipher{
+		block: block,
+		iv:    iv,
+		err:   err,
+	}
+}
+
+func (c *AESCBCBlockCipher) decrypt(cipherText []byte) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
+	bs := c.block.BlockSize()
 	if len(cipherText)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
 
-	mode := cipher.NewCBCDecrypter(block, iv)
+	mode := cipher.NewCBCDecrypter(c.block, c.iv)
 
 	// CryptBlocks can work in-place if the two arguments are the same.
 	mode.CryptBlocks(cipherText, cipherText)
@@ -81,45 +142,12 @@ func decryptCBC(cipherText []byte, key []byte, iv []byte) ([]byte, error) {
 	return stripPadding(cipherText), nil
 }
 
-func encryptECB(plainText []byte, key []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
+func (c *AESCBCBlockCipher) encrypt(plainText []byte) ([]byte, error) {
+	if c.err != nil {
+		return nil, c.err
 	}
 
-	bs := block.BlockSize()
-
-	plainText, err = pkcs7(plainText, bs)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(plainText)%bs != 0 {
-		return nil, fmt.Errorf("Need a multiple of the blocksize")
-	}
-
-	cipherText := make([]byte, 0)
-
-	buf := make([]byte, bs)
-
-	for len(plainText) > 0 {
-		block.Encrypt(buf, plainText)
-		plainText = plainText[bs:]
-		cipherText = append(cipherText, buf...)
-	}
-
-	return cipherText, nil
-}
-
-func encryptCBC(plainText []byte, key []byte, iv []byte) ([]byte, error) {
-	block, err := aes.NewCipher(key)
-
-	if err != nil {
-		return nil, err
-	}
-
-	bs := block.BlockSize()
+	bs := c.block.BlockSize()
 
 	// pad plainText to an appropriate size
 	paddedPlainText, err := pkcs7(plainText, bs)
@@ -138,7 +166,7 @@ func encryptCBC(plainText []byte, key []byte, iv []byte) ([]byte, error) {
 	// include it at the beginning of the ciphertext.
 	// copy(iv[:], cipherText[:bs])
 
-	mode := cipher.NewCBCEncrypter(block, iv)
+	mode := cipher.NewCBCEncrypter(c.block, c.iv)
 	mode.CryptBlocks(cipherText, paddedPlainText)
 
 	return cipherText, nil
@@ -177,9 +205,10 @@ func NewECBEncryptionOracle() EncryptionOracleFn {
 }
 
 func newECBEncryptionOracle(key, prefix, suffix []byte) EncryptionOracleFn {
+	blockCipher := NewAESECBBlockCipher(key)
 	return func(plainText []byte) ([]byte, encryptionMode) {
 		plainText = append(append(prefix, plainText...), suffix...)
-		cipherText, err := encryptECB(plainText, key)
+		cipherText, err := blockCipher.encrypt(plainText)
 		if err != nil {
 			panic(err)
 		}
@@ -192,10 +221,12 @@ func NewCBCEncryptionOracle() EncryptionOracleFn {
 }
 
 func newCBCEncryptionOracle(key, prefix, suffix []byte) EncryptionOracleFn {
+	blockCipher := NewAESCBCBlockCipher(key, newIv())
+
 	return func(plainText []byte) ([]byte, encryptionMode) {
 		plainText = append(append(prefix, plainText...), suffix...)
 		// just use random IVs each time for CBC
-		cipherText, err := encryptCBC(plainText, key, newIv())
+		cipherText, err := blockCipher.encrypt(plainText)
 		if err != nil {
 			panic(err)
 		}

@@ -61,7 +61,8 @@ func Challenge7() (res string, err error) {
 		return
 	}
 
-	plainText, err := decryptECB(rawCipher, []byte("YELLOW SUBMARINE"))
+	blockCipher := NewAESECBBlockCipher([]byte("YELLOW SUBMARINE"))
+	plainText, err := blockCipher.decrypt(rawCipher)
 
 	if err != nil {
 		return

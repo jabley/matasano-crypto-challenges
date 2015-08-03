@@ -20,8 +20,9 @@ func Challenge10() (res string, err error) {
 	}
 
 	iv := make([]byte, 16)
+	blockCipher := NewAESCBCBlockCipher([]byte("YELLOW SUBMARINE"), iv)
 
-	out, err := decryptCBC(rawCipher, []byte("YELLOW SUBMARINE"), iv)
+	out, err := blockCipher.decrypt(rawCipher)
 	return string(out), err
 }
 
@@ -33,8 +34,9 @@ func Challenge10RoundTrip() (res string, err error) {
 	}
 
 	iv := make([]byte, 16)
+	blockCipher := NewAESCBCBlockCipher([]byte("YELLOW SUBMARINE"), iv)
 
-	out, err := encryptCBC(plainText, []byte("YELLOW SUBMARINE"), iv)
+	out, err := blockCipher.encrypt(plainText)
 
 	return base64.StdEncoding.EncodeToString(out), err
 }
@@ -46,7 +48,8 @@ func RoundTripECB() (res string, err error) {
 		return
 	}
 
-	out, err := encryptECB(plainText, []byte("YELLOW SUBMARINE"))
+	blockCipher := NewAESECBBlockCipher([]byte("YELLOW SUBMARINE"))
+	out, err := blockCipher.encrypt(plainText)
 
 	return base64.StdEncoding.EncodeToString(out), err
 }
