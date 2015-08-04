@@ -182,3 +182,15 @@ YnkK`)
 	out := Challenge12([]byte(unknown))
 	assertEqual(t, string(unknown), out)
 }
+
+func TestParseKeyValuePairs(t *testing.T) {
+	assertEqual(t, parseKeyValuePairs("foo=bar&baz=qux&zap=zazzle"), Cookies{
+		"foo": "bar",
+		"baz": "qux",
+		"zap": "zazzle",
+	})
+}
+
+func TestChallenge13(t *testing.T) {
+	assertEqual(t, "admin", Challenge13())
+}

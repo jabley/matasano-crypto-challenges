@@ -85,7 +85,6 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, encrypter EncryptionOracleFn) [
 	// unknown-string is. Repeat with different padding to see what the second
 	// byte is, etc.
 
-
 	// for example, with a block size of 8:
 	// content:	|your-string   |  suffix | [padding]|
 	// bytes:		| A A A A A A A ? | ? ? ? 5 5 5 5 5 |
@@ -224,4 +223,60 @@ func blockOracle(encrypter EncryptionOracleFn, blockSize int, prefix []byte) []b
 // hashKeyFromBytes is used since golang can't use a slice as a key for a map, since equality isn't defined.
 func hashKeyFromBytes(buf []byte) string {
 	return base64.StdEncoding.EncodeToString(buf)
+}
+
+func Challenge13() string {
+	blockCipher := NewAESECBBlockCipher(newKey())
+	encryptUserProfile := func(email string) []byte {
+		profile := ProfileFor(email)
+		cipherText, err := blockCipher.encrypt([]byte(profile))
+		if err != nil {
+			panic(err)
+		}
+		return cipherText
+	}
+
+	decryptAndGetRole := func(cipherText []byte) string {
+		plainText, err := blockCipher.decrypt(cipherText)
+		if err != nil {
+			panic(err)
+		}
+		return parseKeyValuePairs(string(plainText))["role"]
+	}
+
+	return elevateToAdmin(encryptUserProfile, decryptAndGetRole)
+}
+
+func elevateToAdmin(encryptUserProfile func(string) []byte, decryptAndGetRole func([]byte) string) string {
+	// Create an encrypted thing that we can take a block off
+	// So encryptUserProfile will create a structure with email=the-email&uid=10&role=user
+	// We can attack that by considering where the block boundaries are.
+	//
+	// 0123456789abcdef0123456789abcdef0123456789abcdef - position
+	// email=AAAAAAAAAAadmin&uid=10&role=10pppppppppppp - attack text
+	//
+	// (where p is pkcs7 padding)
+	// Slicing the 2nd block will give us the encrypted text for admin
+
+	adminBlock := encryptUserProfile("AAAAAAAAAAadmin")[16:32]
+
+	// Doing another attack of:
+	// 0123456789abcdef0123456789abcdef0123456789abcdef - position
+	// email=u@trustme.com&uid=10&role=userpppppppppppp - attack text
+	//
+	// Slicing the first 2 blocks will give the encrypted text for
+	// email=u@trustme.com&uid=10&role=
+	// Taking the remaining trailing blocks will give us the correctly
+	// padded ending which can be decrypted.
+	// Putting the single block from the first attack in the middle gives:
+	//
+	// email=u@trustme.com&uid=10&role=admin&uid=10&roluser
+
+	toCut := encryptUserProfile("u@trustme.com")
+	encryptedEmailAndUidBlocks := toCut[0:32]
+	validlyPaddedTrailingBlocks := toCut[32:]
+
+	elevatedProfile := append(append(encryptedEmailAndUidBlocks, adminBlock...), validlyPaddedTrailingBlocks...)
+
+	return decryptAndGetRole(elevatedProfile)
 }
