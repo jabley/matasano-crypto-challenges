@@ -200,7 +200,7 @@ func blockOracle(encrypter EncryptionOracleFn, blockSize int, prefix []byte) []b
 		panic("Expected block size bytes")
 	}
 
-	repeats := 3
+	repeats := 2
 	repeatedText := bytes.Repeat(prefix, repeats)
 	buf := make([][]byte, blockSize)
 	for i, _ := range buf {
