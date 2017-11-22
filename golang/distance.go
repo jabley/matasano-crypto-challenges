@@ -1,5 +1,7 @@
 package main
 
+import "math/bits"
+
 func HammingDistance(a, b string) int {
 	return editDistance([]byte(a), []byte(b))
 }
@@ -7,11 +9,7 @@ func HammingDistance(a, b string) int {
 func editDistance(a, b []byte) int {
 	dist := 0
 	for i := range a {
-		val := a[i] ^ b[i]
-		for val != 0 {
-			dist++
-			val &= val - 1
-		}
+		dist += bits.OnesCount8(a[i] ^ b[i])
 	}
 	return dist
 }

@@ -6,6 +6,7 @@ import (
 )
 
 func assertEqual(t *testing.T, expected, actual interface{}) {
+	t.Helper()
 	if expected == nil || actual == nil {
 
 		if actual != expected {
@@ -19,5 +20,6 @@ func assertEqual(t *testing.T, expected, actual interface{}) {
 }
 
 func fail(t *testing.T, expected, actual interface{}) {
+	t.Helper()
 	t.Fatalf("Expected\n%#v\nActual:\n%#v\n", expected, actual)
 }

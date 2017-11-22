@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"crypto/aes"
 	"encoding/hex"
 	"math"
-	"reflect"
 )
 
 func FixedXOR(first, second string) (string, error) {
@@ -40,7 +40,7 @@ func decodeAssumingSingleByte(a []byte) []byte {
 	decrypted := make([]byte, len(a))
 	bestScore := 0
 
-	for guess := 0; guess < 255; guess++ {
+	for guess := 0; guess < 256; guess++ {
 		xor(dst, a, []byte{byte(guess)})
 
 		score := scoreText(dst)
@@ -162,10 +162,8 @@ func blockBasedDecoding(blocks []byte, blockLength int) []byte {
 }
 
 func xor(dst, a []byte, b []byte) {
-	n := len(a)
-	m := len(b)
-	for i := 0; i < n; i++ {
-		dst[i] = a[i] ^ b[i%m]
+	for i := range a {
+		dst[i] = a[i] ^ b[i%len(b)]
 	}
 }
 
@@ -179,7 +177,7 @@ func scoreECB(cipher []byte) int {
 		for j := i + 1; j < blockLength; j++ {
 			otherOffset := j * aes.BlockSize
 			otherBlock := cipher[otherOffset : otherOffset+aes.BlockSize]
-			if reflect.DeepEqual(block, otherBlock) {
+			if bytes.Equal(block, otherBlock) {
 				score++
 			}
 		}
