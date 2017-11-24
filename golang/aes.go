@@ -235,7 +235,7 @@ func newCBCEncryptionOracle(key, prefix, suffix []byte) EncryptionOracleFn {
 }
 
 func sniffEncryptionMode(cipherText []byte) encryptionMode {
-	if 0 < scoreECB(cipherText) {
+	if detectECB(cipherText) {
 		return MODE_ECB
 	}
 	return MODE_CBC

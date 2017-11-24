@@ -1,94 +1,36 @@
 package main
 
 import (
-	"bytes"
 	"crypto/aes"
-	"encoding/hex"
 	"math"
 )
 
-func FixedXOR(first, second string) (string, error) {
-	a, err := hex.DecodeString(first)
-	if err != nil {
-		return "", err
-	}
-	b, err := hex.DecodeString(second)
-	if err != nil {
-		return "", err
-	}
-	var n int
-	if len(a) > len(b) {
-		n = len(a)
-	} else {
-		n = len(b)
-	}
-	dst := make([]byte, n)
-	xor(dst, a, b)
-	return hex.EncodeToString(dst), nil
-}
-
-func SingleByteXORCipher(hexBytes []byte) (string, error) {
-	a, err := decodeHex(hexBytes)
-	if err != nil {
-		return "", err
-	}
-	return string(decodeAssumingSingleByte(a)), nil
-}
-
-func decodeAssumingSingleByte(a []byte) []byte {
-	dst := make([]byte, len(a))
-	decrypted := make([]byte, len(a))
-	bestScore := 0
-
+func findSingleXORKey(a []byte) (res []byte, score int, key byte) {
 	for guess := 0; guess < 256; guess++ {
-		xor(dst, a, []byte{byte(guess)})
-
-		score := scoreText(dst)
-
-		if score > bestScore {
-			// fmt.Printf("Got new best score: %v for %v\n", score, string(dst))
-			bestScore = score
-			copy(decrypted, dst)
+		out := singleXor(a, byte(guess))
+		s := scoreText(out)
+		if s > score {
+			score = s
+			key = byte(guess)
+			res = out
 		}
 	}
-
-	return decrypted
+	return
 }
 
-func decode(rawCipher []byte) []byte {
-	finalSize := len(rawCipher)
-	keysize := guessKeysize(rawCipher)
-
-	// Now that you probably know the KEYSIZE: break the ciphertext into blocks of KEYSIZE length.
-
-	transposed, blockLength := transpose(rawCipher, keysize)
-
-	// Solve each block as if it was single-character XOR. You already have
-	// code to do this.
-	// For each block, the single-byte XOR key that produces the best-looking
-	// histogram is the repeating-key XOR key byte for that block. Put them
-	// together and you have the key.
-	decodedTransposition := blockBasedDecoding(transposed, blockLength)
-	decoded, _ := transpose(decodedTransposition, blockLength)
-
-	// We need to strip off any bytes added as padding during transpose
-	return decoded[:finalSize]
-}
-
-func guessKeysize(rawCipher []byte) int {
-
+func findKeySize(rawCipher []byte) int {
 	minDistance := math.MaxFloat64
-	keysize := -1
+	var keySize int
 	n := len(rawCipher)
 
-	for guessedKeysize := 2; guessedKeysize <= 40; guessedKeysize++ {
-		blockCount := n/guessedKeysize - 1
+	for keyLen := 2; keyLen <= 40; keyLen++ {
+		blockCount := n/keyLen - 1
 		totalDistance := 0.0
 
 		for i := 0; i < blockCount; i++ {
-			offset := i * guessedKeysize
-			first := rawCipher[offset : offset+guessedKeysize]
-			second := rawCipher[offset+guessedKeysize : offset+2*guessedKeysize]
+			offset := i * keyLen
+			first := rawCipher[offset : offset+keyLen]
+			second := rawCipher[offset+keyLen : offset+2*keyLen]
 			totalDistance += normalisedDistance(first, second)
 		}
 
@@ -96,92 +38,90 @@ func guessKeysize(rawCipher []byte) int {
 
 		if minDistance > avgDistance {
 			minDistance = avgDistance
-			keysize = guessedKeysize
+			keySize = keyLen
 		}
 	}
 
-	return keysize
+	return keySize
 }
 
-// transpose the blocks: make a block that is the first byte of every block,
-// and a block that is the second byte of every block, and so on.
-// Treat the original contiguous array as an array of blocks (or lines) of
-// length blockLength. Transpose this to a contiguous array that we treat as
-// an array of blocks or lines of (array.length % blockLength) with suitable
-// rounding and padding.
-//
-// For example, we have an 103 element byte array that we wish to treat as
-// having blocks of size 5. We will treat this as 21 blocks of length 5 (need
-// some padding on the last one). We will return an array that has 5 blocks
-// each of length 21.
+func findRepeatingXORKey(in []byte, keySize int) []byte {
 
-func transpose(original []byte, blockLength int) ([]byte, int) {
-	newLength := transposeBlockLength(len(original), blockLength)
-	n := len(original)
-	result := makeTargetBlocks(n, blockLength)
+	// Now that you probably know the KEYSIZE: break the ciphertext into blocks of KEYSIZE length.
 
-	for i := 0; i < n; i++ {
-		line := i / blockLength
-		col := i % blockLength
-		j := col*newLength + line
-		result[j] = original[i]
-	}
+	// Now transpose the blocks: make a block that is the first byte of every block, and a block
+	// that is the second byte of every block, and so on.
 
-	return result, newLength
-}
+	// We have cipher text 1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+	// Treat it as:
+	// 1234567890abcdef
+	// 1234567890abcdef
+	// 1234567890abcdef
+	// 1234567890abcdef
+	// 1234567890abcdef
 
-func makeTargetBlocks(n int, blockLength int) []byte {
-	var padding int
-	if n%blockLength == 0 {
-		padding = 0
-	} else {
-		padding = blockLength - n%blockLength
-	}
-	return make([]byte, n+padding)
-}
+	// So we make a block containing the each column, and solve single Key XOR for that.
 
-// transposeBlockLength returns the number of blocks of the specified
-// length blockLength required to hold the specified array size n.
-func transposeBlockLength(n int, blockLength int) int {
-	if n%blockLength == 0 {
-		return n / blockLength
-	}
-	return n/blockLength + 1
-}
+	// Solve each block as if it was single-character XOR. You already have code to do this.
 
-func blockBasedDecoding(blocks []byte, blockLength int) []byte {
-	result := make([]byte, len(blocks))
+	// For each block, the single-byte XOR key that produces the best looking histogram is the
+	// repeating-key XOR key byte for that block. Put them together and you have the key.
+	column := make([]byte, (len(in)+keySize-1)/keySize)
+	key := make([]byte, keySize)
 
-	for i := 0; i*blockLength < len(blocks); i++ {
-		offset := i * blockLength
-		decoded := decodeAssumingSingleByte(blocks[offset : offset+blockLength])
-		copy(result[offset:offset+blockLength], decoded)
-	}
-
-	return result
-}
-
-func xor(dst, a []byte, b []byte) {
-	for i := range a {
-		dst[i] = a[i] ^ b[i%len(b)]
-	}
-}
-
-func scoreECB(cipher []byte) int {
-	blockLength := len(cipher) / aes.BlockSize
-	score := 0
-
-	for i := 0; i < blockLength; i++ {
-		offset := i * aes.BlockSize
-		block := cipher[offset : offset+aes.BlockSize]
-		for j := i + 1; j < blockLength; j++ {
-			otherOffset := j * aes.BlockSize
-			otherBlock := cipher[otherOffset : otherOffset+aes.BlockSize]
-			if bytes.Equal(block, otherBlock) {
-				score++
+	for col := 0; col < keySize; col++ {
+		for row := range column {
+			if row*keySize+col >= len(in) {
+				continue
 			}
+			column[row] = in[row*keySize+col]
 		}
+		_, _, k := findSingleXORKey(column)
+		key[col] = k
 	}
 
-	return score
+	return key
+
+}
+
+func xor(a, b []byte) []byte {
+	if len(a) > len(b) {
+		a = a[:len(b)]
+	}
+	res := make([]byte, len(a))
+	for i := range a {
+		res[i] = a[i] ^ b[i]
+	}
+	return res
+}
+
+func repeatingXOR(in, key []byte) []byte {
+	res := make([]byte, len(in))
+	for i, c := range in {
+		res[i] = c ^ key[i%len(key)]
+	}
+	return res
+}
+
+func singleXor(in []byte, b byte) []byte {
+	res := make([]byte, len(in))
+	for i, c := range in {
+		res[i] = c ^ b
+	}
+	return res
+}
+
+func detectECB(in []byte) bool {
+	if len(in)%aes.BlockSize != 0 {
+		panic("detectECB: length not a multiple of blockSize")
+	}
+	seen := make(map[string]struct{})
+	for i := 0; i < len(in); i += aes.BlockSize {
+		val := string(in[i : i+aes.BlockSize])
+		if _, ok := seen[val]; ok {
+			return true
+		}
+		seen[val] = struct{}{}
+	}
+	return false
 }

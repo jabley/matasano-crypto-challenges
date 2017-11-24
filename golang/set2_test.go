@@ -3,25 +3,20 @@ package main
 import (
 	"crypto/aes"
 	"encoding/base64"
-	"io/ioutil"
 	"strings"
 	"testing"
 )
 
 func TestChallenge9(t *testing.T) {
 	out, err := Challenge9()
-	if err != nil {
-		t.Fatal(err)
-	}
+	fatalIfErr(t, err)
 	assertEqual(t, "YELLOW SUBMARINE\u0004\u0004\u0004\u0004", out)
 }
 
 func TestChallenge10(t *testing.T) {
 	out, err := Challenge10()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected, err := ioutil.ReadFile("../outputs/6.txt")
+	fatalIfErr(t, err)
+	expected := readFile(t, "../outputs/6.txt")
 	assertEqual(t, string(expected), out)
 }
 
@@ -30,11 +25,7 @@ func TestChallenge10RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected, err := ioutil.ReadFile("../inputs/10.txt")
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	expected := readFile(t, "../inputs/10.txt")
 	// the base64 encoded version we generate has no \n formatting, so we trim that from the file read
 	// (which does contain \n for readability)
 	expectedStr := strings.Replace(string(expected), "\n", "", -1)
@@ -43,14 +34,9 @@ func TestChallenge10RoundTrip(t *testing.T) {
 
 func TestRoundTripECB(t *testing.T) {
 	out, err := RoundTripECB()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected, err := ioutil.ReadFile("../inputs/7.txt")
+	fatalIfErr(t, err)
+	expected := readFile(t, "../inputs/7.txt")
 
-	if err != nil {
-		t.Fatal(err)
-	}
 	// the base64 encoded version we generate has no \n formatting, so we trim that from the file read
 	// (which does contain \n for readability)
 	expectedStr := strings.Replace(string(expected), "\n", "", -1)
@@ -175,10 +161,7 @@ aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
 dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
 YnkK`)
 
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	fatalIfErr(t, err)
 	out := Challenge12([]byte(unknown))
 	assertEqual(t, string(unknown), out)
 }

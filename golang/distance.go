@@ -2,7 +2,7 @@ package main
 
 import "math/bits"
 
-func HammingDistance(a, b string) int {
+func hammingDistance(a, b string) int {
 	return editDistance([]byte(a), []byte(b))
 }
 
