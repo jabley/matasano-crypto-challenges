@@ -3,21 +3,22 @@ package main
 import "fmt"
 
 // PKCS#7 is a padding scheme that returns a padded plaintext array that is an even multiple of the blocksize
-func pkcs7(original []byte, blockSize int) ([]byte, error) {
+func padPKCS7(in []byte, blockSize int) ([]byte, error) {
 	if blockSize < 0 {
 		return nil, fmt.Errorf("Invalid parameter: blockSize %d", blockSize)
 	}
 
-	nBlocks := len(original) / blockSize
-
-	paddedLength := (nBlocks + 1) * blockSize
-	padding := paddedLength - len(original)
-
-	for i := 0; i < padding; i++ {
-		original = append(original, byte(padding))
+	if blockSize > 256 {
+		panic("padPKCS7: unable to pad above 255")
 	}
 
-	return original, nil
+	padLen := blockSize - len(in)%blockSize
+	res := make([]byte, len(in)+padLen)
+	n := copy(res, in)
+	for i := 0; i < padLen; i++ {
+		res[n+i] = byte(padLen)
+	}
+	return res, nil
 }
 
 func isPkcs7Padded(buf []byte, bs int) bool {

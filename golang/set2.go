@@ -7,11 +7,6 @@ import (
 	"io/ioutil"
 )
 
-func Challenge9() (string, error) {
-	out, err := pkcs7([]byte("YELLOW SUBMARINE"), 20)
-	return string(out), err
-}
-
 func Challenge10() (res string, err error) {
 	rawCipher, err := readBase64Input("../inputs/10.txt")
 

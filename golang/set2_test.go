@@ -8,9 +8,9 @@ import (
 )
 
 func TestChallenge9(t *testing.T) {
-	out, err := Challenge9()
+	out, err := padPKCS7([]byte("YELLOW SUBMARINE"), 20)
 	fatalIfErr(t, err)
-	assertEqual(t, "YELLOW SUBMARINE\u0004\u0004\u0004\u0004", out)
+	assertEqual(t, []byte("YELLOW SUBMARINE\x04\x04\x04\x04"), out)
 }
 
 func TestChallenge10(t *testing.T) {

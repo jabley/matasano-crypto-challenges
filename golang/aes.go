@@ -78,7 +78,7 @@ func (c *AESECBBlockCipher) encrypt(plainText []byte) ([]byte, error) {
 
 	bs := c.block.BlockSize()
 
-	plainText, err := pkcs7(plainText, bs)
+	plainText, err := padPKCS7(plainText, bs)
 
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (c *AESCBCBlockCipher) encrypt(plainText []byte) ([]byte, error) {
 	bs := c.block.BlockSize()
 
 	// pad plainText to an appropriate size
-	paddedPlainText, err := pkcs7(plainText, bs)
+	paddedPlainText, err := padPKCS7(plainText, bs)
 
 	if err != nil {
 		return nil, err
