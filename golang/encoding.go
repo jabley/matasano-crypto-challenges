@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 )
 
-func Hex2Base64(hexBytes string) (string, error) {
+func hex2Base64(hexBytes string) (string, error) {
 	data, err := hex.DecodeString(hexBytes)
 	if err != nil {
 		return "", err

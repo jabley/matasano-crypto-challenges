@@ -2,69 +2,10 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 )
 
-func Challenge10() (res string, err error) {
-	rawCipher, err := readBase64Input("../inputs/10.txt")
-
-	if err != nil {
-		return
-	}
-
-	iv := make([]byte, 16)
-	blockCipher := NewAESCBCBlockCipher([]byte("YELLOW SUBMARINE"), iv)
-
-	out, err := blockCipher.decrypt(rawCipher)
-	return string(out), err
-}
-
-func Challenge10RoundTrip() (res string, err error) {
-	plainText, err := ioutil.ReadFile("../outputs/6.txt")
-
-	if err != nil {
-		return
-	}
-
-	iv := make([]byte, 16)
-	blockCipher := NewAESCBCBlockCipher([]byte("YELLOW SUBMARINE"), iv)
-
-	out, err := blockCipher.encrypt(plainText)
-
-	return base64.StdEncoding.EncodeToString(out), err
-}
-
-func RoundTripECB() (res string, err error) {
-	plainText, err := ioutil.ReadFile("../outputs/6.txt")
-
-	if err != nil {
-		return
-	}
-
-	blockCipher := NewAESECBBlockCipher([]byte("YELLOW SUBMARINE"))
-	out, err := blockCipher.encrypt(plainText)
-
-	return base64.StdEncoding.EncodeToString(out), err
-}
-
-// Challenge12 does byte-at-a-time decryption
-func Challenge12(suffix []byte) string {
-	encrypter := newECBEncryptionOracle(newKey(), []byte{}, suffix)
-
-	blockSizeInfo := discoverBlockSizeInfo(encrypter)
-
-	cipherText, _ := encrypter(createECBDetectingPlainText(blockSizeInfo.blockSize))
-
-	if sniffEncryptionMode(cipherText) != MODE_ECB {
-		panic("encrypter isn't using ECB")
-	}
-
-	return string(discoverSuffix(blockSizeInfo, encrypter))
-}
-
-func discoverSuffix(blockSizeInfo BlockSizeInfo, encrypter EncryptionOracleFn) []byte {
+func discoverSuffix(blockSizeInfo BlockSizeInfo, oracle EncryptionOracleFn) []byte {
 	// Knowing the block size, craft an input block that is exactly 1 byte
 	// short (for instance, if the block size is 8 bytes, make "AAAAAAA").
 	// Think about what the oracle function is going to put in that last
@@ -96,10 +37,9 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, encrypter EncryptionOracleFn) [
 	for {
 		attackSize := attackTextSize(len(known), bs)
 
-		attackText := make([]byte, attackSize)
-		plainTextFill(&attackText)
+		attackText := bytes.Repeat([]byte{'A'}, attackSize)
 
-		missingLastByteCipherText, _ := encrypter(attackText)
+		missingLastByteCipherText, _ := oracle(attackText)
 
 		start := bs * (len(known) / bs)
 		end := start + bs
@@ -111,7 +51,7 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, encrypter EncryptionOracleFn) [
 		// "AAAAAAAC", remembering the first block of each invocation.
 		prefix := append(attackText, known...)
 		trailingBlockStart := (len(prefix) / bs) * bs
-		table := buildLookupTable(encrypter, bs, prefix[trailingBlockStart:])
+		table := buildLookupTable(oracle, bs, prefix[trailingBlockStart:])
 
 		// Match the output of the one-byte-short input to one of the entries in
 		// your dictionary. You've now discovered the first byte of
@@ -123,8 +63,8 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, encrypter EncryptionOracleFn) [
 		}
 
 		// if the output is pkcs7 padded then we are done
-		if isPkcs7Padded(known, bs) {
-			known = stripPadding(known)
+		if isPKCS7Padded(known, bs) {
+			known = unpadPKCS7(known)
 			break
 		} else {
 			// Repeat for the next byte
@@ -173,7 +113,7 @@ func findLongestRepeat(buf []byte, blockSize int) (max int, content []byte, loca
 }
 
 // buildLookupTable returns a map of byte values keyed by hash key of a cipher block.
-func buildLookupTable(encrypter EncryptionOracleFn, blockSize int, prefix []byte) map[string]byte {
+func buildLookupTable(oracle EncryptionOracleFn, blockSize int, prefix []byte) map[string]byte {
 	if len(prefix) != blockSize-1 {
 		panic(fmt.Sprintf("expected one shorter than block size %d but was %d", blockSize, len(prefix)))
 	}
@@ -183,14 +123,14 @@ func buildLookupTable(encrypter EncryptionOracleFn, blockSize int, prefix []byte
 	for guess := 0; guess < 256; guess++ {
 		b := byte(guess)
 		plainText := append(prefix, b)
-		cipherText := blockOracle(encrypter, blockSize, plainText)
+		cipherText := blockOracle(oracle, blockSize, plainText)
 		res[hashKeyFromBytes(cipherText)] = b
 	}
 
 	return res
 }
 
-func blockOracle(encrypter EncryptionOracleFn, blockSize int, prefix []byte) []byte {
+func blockOracle(oracle EncryptionOracleFn, blockSize int, prefix []byte) []byte {
 	if len(prefix) != blockSize {
 		panic("Expected block size bytes")
 	}
@@ -198,13 +138,13 @@ func blockOracle(encrypter EncryptionOracleFn, blockSize int, prefix []byte) []b
 	repeats := 2
 	repeatedText := bytes.Repeat(prefix, repeats)
 	buf := make([][]byte, blockSize)
-	for i, _ := range buf {
+	for i := range buf {
 		buf[i] = repeatedText
 	}
 
 	input := bytes.Join(buf, []byte{byte(0)})
 
-	cipherText, _ := encrypter(input)
+	cipherText, _ := oracle(input)
 
 	max, content, _ := findLongestRepeat(cipherText, blockSize)
 
@@ -217,29 +157,7 @@ func blockOracle(encrypter EncryptionOracleFn, blockSize int, prefix []byte) []b
 
 // hashKeyFromBytes is used since golang can't use a slice as a key for a map, since equality isn't defined.
 func hashKeyFromBytes(buf []byte) string {
-	return base64.StdEncoding.EncodeToString(buf)
-}
-
-func Challenge13() string {
-	blockCipher := NewAESECBBlockCipher(newKey())
-	encryptUserProfile := func(email string) []byte {
-		profile := ProfileFor(email)
-		cipherText, err := blockCipher.encrypt([]byte(profile))
-		if err != nil {
-			panic(err)
-		}
-		return cipherText
-	}
-
-	decryptAndGetRole := func(cipherText []byte) string {
-		plainText, err := blockCipher.decrypt(cipherText)
-		if err != nil {
-			panic(err)
-		}
-		return parseKeyValuePairs(string(plainText))["role"]
-	}
-
-	return elevateToAdmin(encryptUserProfile, decryptAndGetRole)
+	return string(buf)
 }
 
 func elevateToAdmin(encryptUserProfile func(string) []byte, decryptAndGetRole func([]byte) string) string {
@@ -268,10 +186,10 @@ func elevateToAdmin(encryptUserProfile func(string) []byte, decryptAndGetRole fu
 	// email=u@trustme.com&uid=10&role=admin&uid=10&roluser
 
 	toCut := encryptUserProfile("u@trustme.com")
-	encryptedEmailAndUidBlocks := toCut[0:32]
+	encryptedEmailAndUIDBlocks := toCut[0:32]
 	validlyPaddedTrailingBlocks := toCut[32:]
 
-	elevatedProfile := append(append(encryptedEmailAndUidBlocks, adminBlock...), validlyPaddedTrailingBlocks...)
+	elevatedProfile := append(append(encryptedEmailAndUIDBlocks, adminBlock...), validlyPaddedTrailingBlocks...)
 
 	return decryptAndGetRole(elevatedProfile)
 }

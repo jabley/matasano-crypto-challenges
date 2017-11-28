@@ -8,51 +8,60 @@ import (
 )
 
 func TestChallenge9(t *testing.T) {
-	out, err := padPKCS7([]byte("YELLOW SUBMARINE"), 20)
-	fatalIfErr(t, err)
+	out := padPKCS7([]byte("YELLOW SUBMARINE"), 20)
 	assertEqual(t, []byte("YELLOW SUBMARINE\x04\x04\x04\x04"), out)
 }
 
 func TestChallenge10(t *testing.T) {
-	out, err := Challenge10()
-	fatalIfErr(t, err)
-	expected := readFile(t, "../outputs/6.txt")
-	assertEqual(t, string(expected), out)
-}
+	cipherText := decodeBase64(t, string(readFile(t, "../inputs/10.txt")))
 
-func TestChallenge10RoundTrip(t *testing.T) {
-	out, err := Challenge10RoundTrip()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := readFile(t, "../inputs/10.txt")
-	// the base64 encoded version we generate has no \n formatting, so we trim that from the file read
-	// (which does contain \n for readability)
-	expectedStr := strings.Replace(string(expected), "\n", "", -1)
-	assertEqual(t, expectedStr, out)
+	iv := make([]byte, 16)
+	b, err := aes.NewCipher([]byte("YELLOW SUBMARINE"))
+	fatalIfErr(t, err)
+	blockCipher := newAESCBCBlockCipher(b, iv)
+
+	out, err := blockCipher.decrypt(cipherText)
+	fatalIfErr(t, err)
+	plainText := readFile(t, "../outputs/6.txt")
+	assertEqual(t, plainText, out)
+
+	// Try going the other way
+	b64CipherText := string(readFile(t, "../inputs/10.txt"))
+	out, err = blockCipher.encrypt(padPKCS7(plainText, 16))
+	fatalIfErr(t, err)
+	assertEqual(t, strings.Replace(string(b64CipherText), "\n", "", -1), encodeBase64(out))
 }
 
 func TestRoundTripECB(t *testing.T) {
-	out, err := RoundTripECB()
+	plainText := readFile(t, "../outputs/6.txt")
+
+	b, err := aes.NewCipher([]byte("YELLOW SUBMARINE"))
+	fatalIfErr(t, err)
+	blockCipher := newAESECBBlockCipher(b)
+	out, err := blockCipher.encrypt(padPKCS7(plainText, 16))
 	fatalIfErr(t, err)
 	expected := readFile(t, "../inputs/7.txt")
 
 	// the base64 encoded version we generate has no \n formatting, so we trim that from the file read
 	// (which does contain \n for readability)
 	expectedStr := strings.Replace(string(expected), "\n", "", -1)
-	assertEqual(t, expectedStr, out)
+	assertEqual(t, expectedStr, encodeBase64(out))
 }
 
 func TestChallenge11(t *testing.T) {
 	plainText := createECBDetectingPlainText(aes.BlockSize)
-	encryptionOracle := generateEncryptionOracle()
-	cipherText, mode := encryptionOracle(plainText)
-	detectedMode := sniffEncryptionMode(cipherText)
-	assertEqual(t, mode, detectedMode)
+
+	// run it a few times to try to cover both CBC and ECB
+	for i := 0; i < 20; i++ {
+		oracle := newOracle()
+		cipherText, mode := oracle(plainText)
+		detectedMode := sniffEncryptionMode(cipherText)
+		assertEqual(t, mode, detectedMode)
+	}
 }
 
 func TestBlockSizeInfoForDifferentSuffixLengths(t *testing.T) {
-	oracleFn := newECBEncryptionOracle(newKey(), []byte{}, []byte{})
+	oracleFn := newECBSuffixOracle([]byte{})
 
 	createSuffixTestFixture := func(suffixLength, inputSizeToGetFullPadding int) SuffixTestFixture {
 		return SuffixTestFixture{
@@ -155,14 +164,23 @@ func TestAttackTextSize(t *testing.T) {
 }
 
 func TestChallenge12(t *testing.T) {
-	unknown, err := base64.StdEncoding.DecodeString(
+	unknown := decodeBase64(t,
 		`Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
 aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
 dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
 YnkK`)
 
-	fatalIfErr(t, err)
-	out := Challenge12([]byte(unknown))
+	oracle := newECBSuffixOracle(unknown)
+
+	blockSizeInfo := discoverBlockSizeInfo(oracle)
+
+	cipherText, _ := oracle(createECBDetectingPlainText(blockSizeInfo.blockSize))
+
+	if sniffEncryptionMode(cipherText) != MODE_ECB {
+		t.Error("encrypter isn't using ECB")
+	}
+
+	out := string(discoverSuffix(blockSizeInfo, oracle))
 	assertEqual(t, string(unknown), out)
 }
 
@@ -175,5 +193,31 @@ func TestParseKeyValuePairs(t *testing.T) {
 }
 
 func TestChallenge13(t *testing.T) {
-	assertEqual(t, "admin", Challenge13())
+	b, err := aes.NewCipher(newKey())
+	fatalIfErr(t, err)
+	blockCipher := newAESECBBlockCipher(b)
+	encryptUserProfile := func(email string) []byte {
+		profile := ProfileFor(email)
+		cipherText, err := blockCipher.encrypt(padPKCS7([]byte(profile), 16))
+		if err != nil {
+			panic(err)
+		}
+		return cipherText
+	}
+
+	decryptAndGetRole := func(cipherText []byte) string {
+		plainText, err := blockCipher.decrypt(cipherText)
+		if err != nil {
+			panic(err)
+		}
+		return parseKeyValuePairs(string(plainText))["role"]
+	}
+
+	out := elevateToAdmin(encryptUserProfile, decryptAndGetRole)
+
+	assertEqual(t, "admin", out)
+}
+
+func encodeBase64(in []byte) string {
+	return base64.StdEncoding.EncodeToString(in)
 }

@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	mathrand "math/rand"
 )
 
 type encryptionMode int
@@ -38,64 +40,39 @@ type BlockCipher interface {
 
 type AESECBBlockCipher struct {
 	block cipher.Block
-	err   error
 }
 
-func NewAESECBBlockCipher(key []byte) BlockCipher {
-	block, err := aes.NewCipher(key)
+func newAESECBBlockCipher(b cipher.Block) BlockCipher {
 	return &AESECBBlockCipher{
-		block: block,
-		err:   err,
+		block: b,
 	}
 }
 
 func (c *AESECBBlockCipher) decrypt(cipher []byte) ([]byte, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-
 	bs := c.block.BlockSize()
 	if len(cipher)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
 
-	plainText := make([]byte, 0)
-	buf := make([]byte, bs)
-
-	for len(cipher) > 0 {
-		c.block.Decrypt(buf, cipher)
-		cipher = cipher[bs:]
-		plainText = append(plainText, buf...)
+	plainText := make([]byte, len(cipher))
+	for i := 0; i < len(cipher); i += bs {
+		c.block.Decrypt(plainText[i:], cipher[i:])
 	}
 
-	return stripPadding(plainText), nil
+	return unpadPKCS7(plainText), nil
 }
 
 func (c *AESECBBlockCipher) encrypt(plainText []byte) ([]byte, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-
 	bs := c.block.BlockSize()
-
-	plainText, err := padPKCS7(plainText, bs)
-
-	if err != nil {
-		return nil, err
-	}
 
 	if len(plainText)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
 
-	cipherText := make([]byte, 0)
+	cipherText := make([]byte, len(plainText))
 
-	buf := make([]byte, bs)
-
-	for len(plainText) > 0 {
-		c.block.Encrypt(buf, plainText)
-		plainText = plainText[bs:]
-		cipherText = append(cipherText, buf...)
+	for i := 0; i < len(plainText); i += bs {
+		c.block.Encrypt(cipherText[i:], plainText[i:])
 	}
 
 	return cipherText, nil
@@ -104,32 +81,32 @@ func (c *AESECBBlockCipher) encrypt(plainText []byte) ([]byte, error) {
 type AESCBCBlockCipher struct {
 	block cipher.Block
 	iv    []byte
-	err   error
 }
 
-func NewAESCBCBlockCipher(key []byte, iv []byte) BlockCipher {
-	block, err := aes.NewCipher(key)
+func newAESCBCBlockCipher(b cipher.Block, iv []byte) BlockCipher {
 	return &AESCBCBlockCipher{
-		block: block,
+		block: b,
 		iv:    iv,
-		err:   err,
 	}
 }
 
 func (c *AESCBCBlockCipher) decrypt(cipherText []byte) ([]byte, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-
 	bs := c.block.BlockSize()
 	if len(cipherText)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
 
-	mode := cipher.NewCBCDecrypter(c.block, c.iv)
+	// decrypt – don't use OpenSSL (or indeed Go cipher.BlockMode implementations)
+	// because you don't learn anything
 
-	// CryptBlocks can work in-place if the two arguments are the same.
-	mode.CryptBlocks(cipherText, cipherText)
+	plainText := make([]byte, len(cipherText))
+	prev := c.iv
+	buf := make([]byte, bs)
+	for i := 0; i < len(cipherText)/bs; i++ {
+		c.block.Decrypt(buf, cipherText[i*bs:])
+		copy(plainText[i*bs:], xor(buf, prev))
+		prev = cipherText[i*bs : (i+1)*bs]
+	}
 
 	// If the original plainText lengths are not a multiple of the block
 	// size, padding would have to be added when encrypting, which would be
@@ -139,98 +116,70 @@ func (c *AESCBCBlockCipher) decrypt(cipherText []byte) ([]byte, error) {
 	// using crypto/hmac) before being decrypted in order to avoid creating
 	// a padding oracle.
 
-	return stripPadding(cipherText), nil
+	return unpadPKCS7(plainText), nil
 }
 
 func (c *AESCBCBlockCipher) encrypt(plainText []byte) ([]byte, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-
 	bs := c.block.BlockSize()
 
-	// pad plainText to an appropriate size
-	paddedPlainText, err := padPKCS7(plainText, bs)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(paddedPlainText)%bs != 0 {
+	if len(plainText)%bs != 0 {
 		return nil, fmt.Errorf("Need a multiple of the blocksize")
 	}
 
-	// encrypt
-	cipherText := make([]byte, len(paddedPlainText))
-	// The IV needs to be unique, but not secure. Therefore it's common to
-	// include it at the beginning of the ciphertext.
-	// copy(iv[:], cipherText[:bs])
-
-	mode := cipher.NewCBCEncrypter(c.block, c.iv)
-	mode.CryptBlocks(cipherText, paddedPlainText)
-
-	return cipherText, nil
+	// encrypt – don't use OpenSSL (or indeed Go cipher.BlockMode implementations)
+	// because you don't learn anything
+	out := make([]byte, len(plainText))
+	prev := c.iv
+	for i := 0; i < len(plainText)/bs; i++ {
+		copy(out[i*bs:], xor(plainText[i*bs:(i+1)*bs], prev))
+		c.block.Encrypt(out[i*bs:], out[i*bs:])
+		prev = out[i*bs : (i+1)*bs]
+	}
+	return out, nil
 }
 
-func generateEncryptionOracle() EncryptionOracleFn {
+func newOracle() EncryptionOracleFn {
 	// generate a random key and encrypt under it.
-	key := newKey()
-
-	// append 5-10 bytes (count chosen randomly) before the plaintext and
-	// 5-10 bytes after the plaintext.
-	randomPrefix := newRandomBytes(6)
-	randomSuffix := newRandomBytes(6)
+	b, _ := aes.NewCipher(newKey())
 
 	var mode encryptionMode
-
+	var blockCipher BlockCipher
 	// choose to encrypt under ECB 1/2 the time, and under CBC the other half
-	if randomInt(2) == 0 {
+	if mathrand.Intn(2) == 0 {
 		mode = MODE_ECB
+		blockCipher = newAESECBBlockCipher(b)
 	} else {
 		mode = MODE_CBC
-	}
-
-	switch mode {
-	case MODE_ECB:
-		return newECBEncryptionOracle(key, randomPrefix, randomSuffix)
-	case MODE_CBC:
-		return newCBCEncryptionOracle(key, randomPrefix, randomSuffix)
-	default:
-		panic(fmt.Errorf("Unknown mode %q", mode))
-	}
-}
-
-func NewECBEncryptionOracle() EncryptionOracleFn {
-	return newECBEncryptionOracle(newKey(), newRandomBytes(6), newRandomBytes(6))
-}
-
-func newECBEncryptionOracle(key, prefix, suffix []byte) EncryptionOracleFn {
-	blockCipher := NewAESECBBlockCipher(key)
-	return func(plainText []byte) ([]byte, encryptionMode) {
-		plainText = append(append(prefix, plainText...), suffix...)
-		cipherText, err := blockCipher.encrypt(plainText)
-		if err != nil {
-			panic(err)
-		}
-		return cipherText, MODE_ECB
-	}
-}
-
-func NewCBCEncryptionOracle() EncryptionOracleFn {
-	return newCBCEncryptionOracle(newKey(), newRandomBytes(6), newRandomBytes(6))
-}
-
-func newCBCEncryptionOracle(key, prefix, suffix []byte) EncryptionOracleFn {
-	blockCipher := NewAESCBCBlockCipher(key, newIv())
-
-	return func(plainText []byte) ([]byte, encryptionMode) {
-		plainText = append(append(prefix, plainText...), suffix...)
 		// just use random IVs each time for CBC
-		cipherText, err := blockCipher.encrypt(plainText)
+		blockCipher = newAESCBCBlockCipher(b, newIv())
+	}
+
+	return func(plainText []byte) ([]byte, encryptionMode) {
+		// append 5-10 bytes (count chosen randomly) before the plaintext and
+		// 5-10 bytes after the plaintext.
+		randomPrefix := newRandomBytes(6)
+		randomSuffix := newRandomBytes(6)
+
+		plainText = append(append(randomPrefix, plainText...), randomSuffix...)
+		cipherText, err := blockCipher.encrypt(padPKCS7(plainText, 16))
 		if err != nil {
 			panic(err)
 		}
-		return cipherText, MODE_CBC
+		return cipherText, mode
+	}
+}
+
+func newECBSuffixOracle(secret []byte) EncryptionOracleFn {
+	b, _ := aes.NewCipher(newKey())
+	blockCipher := newAESECBBlockCipher(b)
+
+	return func(in []byte) ([]byte, encryptionMode) {
+		msg := padPKCS7(append(in, secret...), 16)
+		out, err := blockCipher.encrypt(msg)
+		if err != nil {
+			panic(err)
+		}
+		return out, MODE_ECB
 	}
 }
 
@@ -279,23 +228,10 @@ func randomInt(n int) int {
 // Challenge 8 taught us, the problem with ECB is that it is stateless
 // and deterministic; the same 16 byte plaintext block will always
 // produce the same 16 byte ciphertext. So we create 3 blocks of the same
-// content so that we can look for a repeating pattern in a encrypted
-// output.
+// content so that we can look for a repeating pattern of 2 blocks in a
+// encrypted output. 3 blocks input means we get at least 2 blocks
+// duplicate output, even if there is some random prefix and our input
+// isn't aligned on block boundaries.
 func createECBDetectingPlainText(blockSize int) []byte {
-	res := make([]byte, blockSize*3)
-	plainTextFill(&res)
-	return res
-}
-
-// plainTextFill sets each entry of the byte array to 'A'. This can be
-// useful to having a known, repeating input to a cipher function
-func plainTextFill(buf *[]byte) {
-	fillByteBuffer(buf, 'A')
-}
-
-func fillByteBuffer(buf *[]byte, b byte) {
-	res := *buf
-	for i, _ := range res {
-		res[i] = b
-	}
+	return bytes.Repeat([]byte{'A'}, blockSize*3)
 }

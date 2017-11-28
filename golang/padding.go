@@ -3,13 +3,13 @@ package main
 import "fmt"
 
 // PKCS#7 is a padding scheme that returns a padded plaintext array that is an even multiple of the blocksize
-func padPKCS7(in []byte, blockSize int) ([]byte, error) {
+func padPKCS7(in []byte, blockSize int) []byte {
 	if blockSize < 0 {
-		return nil, fmt.Errorf("Invalid parameter: blockSize %d", blockSize)
+		panic("size can't be less than 0")
 	}
 
 	if blockSize > 256 {
-		panic("padPKCS7: unable to pad above 255")
+		panic("size can't be greater than max byte")
 	}
 
 	padLen := blockSize - len(in)%blockSize
@@ -18,10 +18,10 @@ func padPKCS7(in []byte, blockSize int) ([]byte, error) {
 	for i := 0; i < padLen; i++ {
 		res[n+i] = byte(padLen)
 	}
-	return res, nil
+	return res
 }
 
-func isPkcs7Padded(buf []byte, bs int) bool {
+func isPKCS7Padded(buf []byte, bs int) bool {
 	n := len(buf)
 	if n == 0 {
 		return false
@@ -44,7 +44,7 @@ func isPkcs7Padded(buf []byte, bs int) bool {
 	return true
 }
 
-func stripPadding(plainText []byte) []byte {
+func unpadPKCS7(plainText []byte) []byte {
 	n := len(plainText)
 	paddingLength := int(plainText[n-1])
 
@@ -68,7 +68,7 @@ func (bs *BlockSizeInfo) String() string {
 // cipher. You can determine the block size by incrementing the input one
 // byte at a time, and observing when the cipher text size jumps by multiple
 // bytes; ie the block size.
-func discoverBlockSizeInfo(encrypter EncryptionOracleFn) BlockSizeInfo {
+func discoverBlockSizeInfo(oracle EncryptionOracleFn) BlockSizeInfo {
 	// Assume block size is 8:
 	// =>
 	// suffix | inputSizeToGetFullPadding
@@ -84,13 +84,13 @@ func discoverBlockSizeInfo(encrypter EncryptionOracleFn) BlockSizeInfo {
 	//    9   |           7
 
 	plainText := []byte{}
-	cipher, _ := encrypter(plainText)
+	cipher, _ := oracle(plainText)
 	initialLength := len(cipher)
 	cipherLength := initialLength
 
 	for cipherLength == initialLength {
 		plainText = append(plainText, 'A')
-		cipher, _ = encrypter(plainText)
+		cipher, _ = oracle(plainText)
 		cipherLength = len(cipher)
 	}
 

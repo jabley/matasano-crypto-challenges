@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/aes"
 	"encoding/base64"
 	"encoding/hex"
 	"io/ioutil"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestChallenge1(t *testing.T) {
-	s, err := Hex2Base64("49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d")
+	s, err := hex2Base64("49276d206b696c6c696e6720796f757220627261696e206c696b65206120706f69736f6e6f7573206d757368726f6f6d")
 	fatalIfErr(t, err)
 	assertEqual(t, "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t", s)
 }
@@ -64,7 +65,9 @@ func TestChallenge6(t *testing.T) {
 
 func TestChallenge7(t *testing.T) {
 	in := decodeBase64(t, string(readFile(t, "../inputs/7.txt")))
-	blockCipher := NewAESECBBlockCipher([]byte("YELLOW SUBMARINE"))
+	b, err := aes.NewCipher([]byte("YELLOW SUBMARINE"))
+	fatalIfErr(t, err)
+	blockCipher := newAESECBBlockCipher(b)
 	out, err := blockCipher.decrypt(in)
 	fatalIfErr(t, err)
 	expected := readFile(t, "../outputs/6.txt")
