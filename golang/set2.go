@@ -49,9 +49,7 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, oracle EncryptionOracleFn) []by
 		// Make a dictionary of every possible last byte by feeding different
 		// strings to the oracle; for instance, "AAAAAAAA", "AAAAAAAB",
 		// "AAAAAAAC", remembering the first block of each invocation.
-		prefix := append(attackText, known...)
-		trailingBlockStart := (len(prefix) / bs) * bs
-		table := buildLookupTable(oracle, bs, prefix[trailingBlockStart:])
+		table := makeDict(oracle, bs, known)
 
 		// Match the output of the one-byte-short input to one of the entries in
 		// your dictionary. You've now discovered the first byte of
@@ -79,80 +77,28 @@ func attackTextSize(knownSize, blockSize int) int {
 	return blockSize - 1 - (knownSize % blockSize)
 }
 
-// findLongestRepeat returns the number of instances of the longest repeating
-// block, and which block is the first.
-func findLongestRepeat(buf []byte, blockSize int) (max int, content []byte, location int) {
-	if len(buf)%blockSize != 0 {
-		panic("Need multiple of block size")
-	}
-
-	totalBlocks := len(buf) / blockSize
-
-	var previous []byte
-	count := 1
-
-	for i := 0; i < totalBlocks; i++ {
-		start := i * blockSize
-		end := start + blockSize
-		chunk := buf[start:end]
-
-		if bytes.Equal(previous, chunk) {
-			count++
-			if count > max {
-				max = count
-				content = chunk
-				location = i - max
-			}
-		} else {
-			count = 1
-		}
-		previous = chunk
-	}
-
-	return
-}
-
-// buildLookupTable returns a map of byte values keyed by hash key of a cipher block.
-func buildLookupTable(oracle EncryptionOracleFn, blockSize int, prefix []byte) map[string]byte {
-	if len(prefix) != blockSize-1 {
-		panic(fmt.Sprintf("expected one shorter than block size %d but was %d", blockSize, len(prefix)))
-	}
-
+// makeDict returns a map of byte values keyed by hash key of a cipher block.
+func makeDict(oracle EncryptionOracleFn, blockSize int, known []byte) map[string]byte {
 	res := make(map[string]byte)
+
+	msg := bytes.Repeat([]byte{'A'}, blockSize)
+	msg = append(msg, known...)
+	msg = append(msg, '?')
+	msg = msg[len(msg)-blockSize:]
 
 	for guess := 0; guess < 256; guess++ {
 		b := byte(guess)
-		plainText := append(prefix, b)
-		cipherText := blockOracle(oracle, blockSize, plainText)
+		msg[blockSize-1] = b
+		cipherText := askOracle(oracle, msg)[:blockSize]
 		res[hashKeyFromBytes(cipherText)] = b
 	}
 
 	return res
 }
 
-func blockOracle(oracle EncryptionOracleFn, blockSize int, prefix []byte) []byte {
-	if len(prefix) != blockSize {
-		panic("Expected block size bytes")
-	}
-
-	repeats := 2
-	repeatedText := bytes.Repeat(prefix, repeats)
-	buf := make([][]byte, blockSize)
-	for i := range buf {
-		buf[i] = repeatedText
-	}
-
-	input := bytes.Join(buf, []byte{byte(0)})
-
-	cipherText, _ := oracle(input)
-
-	max, content, _ := findLongestRepeat(cipherText, blockSize)
-
-	if max == repeats {
-		return content
-	}
-
-	panic(fmt.Sprintf("Failed to find encrypted bytes, Found %d\n", max))
+func askOracle(oracle EncryptionOracleFn, msg []byte) []byte {
+	out, _ := oracle(msg)
+	return out
 }
 
 // hashKeyFromBytes is used since golang can't use a slice as a key for a map, since equality isn't defined.
