@@ -177,7 +177,7 @@ YnkK`)
 	cipherText, _ := oracle(createECBDetectingPlainText(blockSizeInfo.blockSize))
 
 	if sniffEncryptionMode(cipherText) != MODE_ECB {
-		t.Error("encrypter isn't using ECB")
+		t.Error("oracle isn't using ECB")
 	}
 
 	out := string(discoverSuffix(blockSizeInfo, oracle))
@@ -220,4 +220,29 @@ func TestChallenge13(t *testing.T) {
 
 func encodeBase64(in []byte) string {
 	return base64.StdEncoding.EncodeToString(in)
+}
+
+func TestChallenge14(t *testing.T) {
+	unknown, err := base64.StdEncoding.DecodeString(
+		`Um9sbGluJyBpbiBteSA1LjAKV2l0aCBteSByYWctdG9wIGRvd24gc28gbXkg
+aGFpciBjYW4gYmxvdwpUaGUgZ2lybGllcyBvbiBzdGFuZGJ5IHdhdmluZyBq
+dXN0IHRvIHNheSBoaQpEaWQgeW91IHN0b3A/IE5vLCBJIGp1c3QgZHJvdmUg
+YnkK`)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oracle := newECBSuffixOracleWithPrefix(unknown)
+	blockSizeInfo := discoverBlockSizeInfo(oracle)
+	cipherText := askOracle(oracle, createECBDetectingPlainText(blockSizeInfo.blockSize))
+
+	if sniffEncryptionMode(cipherText) != MODE_ECB {
+		panic("encrypter isn't using ECB")
+	}
+
+	// we have ES-128-ECB(random-prefix || your-string || unknown-string, random-key)
+	out := string(discoverSuffixWithRandomPrefix(blockSizeInfo, oracle))
+
+	assertEqual(t, string(unknown), out)
 }

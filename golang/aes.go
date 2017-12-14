@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	mathrand "math/rand"
+	"time"
 )
 
 type encryptionMode int
@@ -175,6 +176,27 @@ func newECBSuffixOracle(secret []byte) EncryptionOracleFn {
 
 	return func(in []byte) ([]byte, encryptionMode) {
 		msg := padPKCS7(append(in, secret...), 16)
+		out, err := blockCipher.encrypt(msg)
+		if err != nil {
+			panic(err)
+		}
+		return out, MODE_ECB
+	}
+}
+
+func init() {
+	mathrand.Seed(time.Now().Unix())
+}
+
+func newECBSuffixOracleWithPrefix(secret []byte) EncryptionOracleFn {
+	b, _ := aes.NewCipher(newKey())
+	blockCipher := newAESECBBlockCipher(b)
+
+	prefix := make([]byte, mathrand.Intn(100))
+
+	return func(in []byte) ([]byte, encryptionMode) {
+		rand.Read(prefix)
+		msg := padPKCS7(append(prefix, append(in, secret...)...), 16)
 		out, err := blockCipher.encrypt(msg)
 		if err != nil {
 			panic(err)

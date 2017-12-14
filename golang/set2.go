@@ -39,7 +39,7 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, oracle EncryptionOracleFn) []by
 
 		attackText := bytes.Repeat([]byte{'A'}, attackSize)
 
-		missingLastByteCipherText, _ := oracle(attackText)
+		missingLastByteCipherText := askOracle(oracle, attackText)
 
 		start := bs * (len(known) / bs)
 		end := start + bs
@@ -64,12 +64,104 @@ func discoverSuffix(blockSizeInfo BlockSizeInfo, oracle EncryptionOracleFn) []by
 		if isPKCS7Padded(known, bs) {
 			known = unpadPKCS7(known)
 			break
-		} else {
-			// Repeat for the next byte
 		}
+
+		// Repeat for the next byte
 	}
 
 	return known
+}
+
+func discoverSuffixWithRandomPrefix(blockSizeInfo BlockSizeInfo, oracle EncryptionOracleFn) []byte {
+	// AES-128-ECB(random-prefix || attacker-controlled || target-bytes, random-key)
+	//
+	// The input `random-prefix || attacker-controlled || target-bytes` will be
+	// padded to a multiple of block size.
+
+	bs := blockSizeInfo.blockSize
+
+	prefixSize := discoverPrefixSize(bs, oracle)
+
+	// We know how long the prefix is. So we know how long to make attacker-controlled so
+	// that the first byte of target-bytes is part of a block
+	return discoverSuffix(blockSizeInfo, func(in []byte) ([]byte, encryptionMode) {
+		p := bs - prefixSize%bs
+		msg := append(bytes.Repeat([]byte{'A'}, p), in...)
+		out := askOracle(oracle, msg)
+		return out[prefixSize+p:], MODE_ECB
+	})
+}
+
+// discoverPrefixSize tries to determine how long the prefix is in the EncryptionOracleFn.
+// returns the prefix size in bytes
+func discoverPrefixSize(bs int, oracle EncryptionOracleFn) int {
+	// We can find out how long the random prefix is by:
+	// - create an n block long attack text
+	attackText := createECBDetectingPlainText(bs)
+
+	// - search for a n block long cipher text out
+	for i := 0; i < bs; i++ {
+		padding := make([]byte, i)
+		plainText := append(padding, attackText...)
+
+		// - keep prepending a padding byte until we find a n block long cipher text
+		cipherText := askOracle(oracle, plainText)
+
+		blockText, location := findRepeatingBlock(cipherText, bs, len(attackText)/bs)
+
+		if location != -1 {
+			// - change the attack text content (but not the prefix padding) and confirm that
+			//   we get a different n block long cipher text AT THE SAME LOCATION
+			attackText = bytes.Repeat([]byte{'B'}, len(attackText))
+			plainText := append(padding, attackText...)
+			cipherText := askOracle(oracle, plainText)
+			newBlock, newLocation := findRepeatingBlock(cipherText, bs, len(attackText)/bs)
+			if newLocation == location && !bytes.Equal(blockText, newBlock) {
+				// profit!
+				return location*bs - i
+			}
+		}
+
+		// - repeat until we know the prefix size
+	}
+
+	panic("Could not determine the prefix size")
+}
+
+// findRepeatingBlock returns the first repeating block of count blocks
+// of blockSize, or -1 if there isn't one.
+// For example, with a blockSize of 16, find 3 repeating blocks.
+func findRepeatingBlock(buf []byte, blockSize int, count int) (content []byte, location int) {
+	if len(buf)%blockSize != 0 {
+		panic("Need multiple of block size")
+	}
+
+	location = -1
+
+	totalBlocks := len(buf) / blockSize
+
+	var previous []byte
+	seen := 0
+
+	for i := 0; i < totalBlocks; i++ {
+		start := i * blockSize
+		end := start + blockSize
+		chunk := buf[start:end]
+
+		if bytes.Equal(previous, chunk) {
+			seen++
+			if seen == count {
+				content = chunk
+				location = i + 1 - seen
+				break
+			}
+		} else {
+			seen = 1
+		}
+		previous = chunk
+	}
+
+	return
 }
 
 // attackTextSize returns the size of attack text padding needed to discover the next byte.
