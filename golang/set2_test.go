@@ -246,3 +246,10 @@ YnkK`)
 
 	assertEqual(t, string(unknown), out)
 }
+
+func TestChallenge15(t *testing.T) {
+	assertEqual(t, true, isPKCS7Padded([]byte("ICE ICE BABY\x04\x04\x04\x04"), 16))
+	assertEqual(t, "ICE ICE BABY", string(unpadPKCS7([]byte("ICE ICE BABY\x04\x04\x04\x04"))))
+	assertEqual(t, false, isPKCS7Padded([]byte("ICE ICE BABY\x05\x05\x05\x05"), 16))
+	assertEqual(t, false, isPKCS7Padded([]byte("ICE ICE BABY\x01\x02\x03\x04"), 16))
+}
