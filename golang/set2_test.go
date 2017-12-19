@@ -190,6 +190,10 @@ func TestParseKeyValuePairs(t *testing.T) {
 		"baz": "qux",
 		"zap": "zazzle",
 	})
+	assertEqual(t, parseKeyValuePairs("email=foo@bar.com&role=admin&role=user"), Cookies{
+		"email": "foo@bar.com",
+		"role":  "admin",
+	})
 }
 
 func TestChallenge13(t *testing.T) {
@@ -198,7 +202,8 @@ func TestChallenge13(t *testing.T) {
 	blockCipher := newAESECBBlockCipher(b)
 	encryptUserProfile := func(email string) []byte {
 		profile := ProfileFor(email)
-		cipherText, err := blockCipher.encrypt(padPKCS7([]byte(profile), 16))
+		msg := padPKCS7([]byte(profile), 16)
+		cipherText, err := blockCipher.encrypt(msg)
 		if err != nil {
 			panic(err)
 		}

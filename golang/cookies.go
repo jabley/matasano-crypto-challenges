@@ -17,7 +17,10 @@ func parseKeyValuePairs(v string) Cookies {
 			res[kv[0]] = ""
 		// key-value pair
 		case 2:
-			res[kv[0]] = kv[1]
+			// Only accept the first occurence
+			if _, ok := res[kv[0]]; !ok {
+				res[kv[0]] = kv[1]
+			}
 		// WAT?
 		default:
 			panic("Unexpected value: " + p)
