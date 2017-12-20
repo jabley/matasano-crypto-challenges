@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/aes"
 	"fmt"
 	"strings"
 )
@@ -215,4 +216,66 @@ func elevateToAdmin(encryptUserProfile func(string) []byte, decryptAndGetRole fu
 	elevatedProfile := emailBlock + padEmailBlock + adminBlock + trailingBlock
 
 	return decryptAndGetRole([]byte(elevatedProfile))
+}
+
+func newCBCCookieOracles() (
+	generateCookie func(string) string,
+	amIAdmin func(string) bool,
+) {
+	// Generate a random AES key.
+	b, _ := aes.NewCipher(newKey())
+	iv := newIv()
+	blockCipher := newAESCBCBlockCipher(b, iv)
+
+	generateCookie = func(userdata string) string {
+		// The function should quote out the ";" and "=" characters.
+		userdata = strings.Replace(userdata, ";", "%3B", -1)
+		userdata = strings.Replace(userdata, "=", "%3D", -1)
+
+		// The first function should take an arbitrary input string, prepend the string:
+		//
+		// "comment1=cooking%20MCs;userdata="
+		//
+		// and append the string:
+		//
+		// ";comment2=%20like%20a%20pound%20of%20bacon"
+		msg := "comment1=cooking%20MCs;userdata=" + userdata + ";comment2=%20like%20a%20pound%20of%20bacon"
+
+		// The function should then pad out the input to the 16-byte AES block length and encrypt it under the random AES key.
+		out, _ := blockCipher.encrypt(padPKCS7([]byte(msg), 16))
+		return string(out)
+	}
+
+	amIAdmin = func(in string) bool {
+		// The second function should decrypt the string
+		msg := []byte(in)
+		out, _ := blockCipher.decrypt(msg)
+		// and look for the characters ";role=admin;"
+		return bytes.Contains(out, []byte(";role=admin;"))
+	}
+
+	return
+}
+
+func xorString(a, b string) string {
+	return string(xor([]byte(a), []byte(b)))
+}
+
+func makeCBCAdminCookie(generateCookie func(string) string) string {
+	prefix := "comment1=cooking%20MCs;userdata="
+
+	// justify "0123456789ABCDEF"
+	desired := "AA;role=admin;AA"
+	userDataBuf := strings.Repeat("?", 16*2)
+
+	out := generateCookie(userDataBuf)
+
+	leadingSlice := out[:len(prefix)]
+	targetBlock := out[len(prefix) : len(prefix)+16]
+	trailingSlice := out[len(prefix)+16:]
+
+	// Insert our attack text into the block
+	targetBlock = xorString(targetBlock, xorString(strings.Repeat("?", 16), desired))
+
+	return leadingSlice + targetBlock + trailingSlice
 }

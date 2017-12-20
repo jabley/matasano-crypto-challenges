@@ -258,3 +258,11 @@ func TestChallenge15(t *testing.T) {
 	assertEqual(t, false, isPKCS7Padded([]byte("ICE ICE BABY\x05\x05\x05\x05"), 16))
 	assertEqual(t, false, isPKCS7Padded([]byte("ICE ICE BABY\x01\x02\x03\x04"), 16))
 }
+
+func TestChallenge16(t *testing.T) {
+	generateCookie, amIAdmin := newCBCCookieOracles()
+
+	// generateCookie escapes ; and = characters, this attack would be too easy
+	assertEqual(t, false, amIAdmin(generateCookie(";role=admin;")))
+	assertEqual(t, true, amIAdmin(makeCBCAdminCookie(generateCookie)))
+}
