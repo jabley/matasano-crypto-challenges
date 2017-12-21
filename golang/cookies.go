@@ -39,15 +39,12 @@ func (c *Cookies) String() string {
 		tmp[k] = v
 	}
 
-	res := ""
+	var res []string
 
 	handleKey := func(k string) {
 		if v, ok := tmp[k]; ok {
-			res += k + "=" + v
+			res = append(res, k+"="+v)
 			delete(tmp, k)
-			if len(tmp) > 0 {
-				res += "&"
-			}
 		}
 	}
 
@@ -58,7 +55,7 @@ func (c *Cookies) String() string {
 
 	// Not bothered about any other entries for now
 
-	return res
+	return strings.Join(res, "&")
 }
 
 func ProfileFor(email string) string {
