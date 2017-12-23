@@ -84,13 +84,13 @@ func discoverBlockSizeInfo(oracle EncryptionOracleFn) BlockSizeInfo {
 	//    9   |           7
 
 	plainText := []byte{}
-	cipher, _ := oracle(plainText)
+	cipher := askOracle(oracle, plainText)
 	initialLength := len(cipher)
 	cipherLength := initialLength
 
 	for cipherLength == initialLength {
 		plainText = append(plainText, 'A')
-		cipher, _ = oracle(plainText)
+		cipher = askOracle(oracle, plainText)
 		cipherLength = len(cipher)
 	}
 

@@ -174,7 +174,7 @@ YnkK`)
 
 	blockSizeInfo := discoverBlockSizeInfo(oracle)
 
-	cipherText, _ := oracle(createECBDetectingPlainText(blockSizeInfo.blockSize))
+	cipherText := askOracle(oracle, createECBDetectingPlainText(blockSizeInfo.blockSize))
 
 	if sniffEncryptionMode(cipherText) != MODE_ECB {
 		t.Error("oracle isn't using ECB")
