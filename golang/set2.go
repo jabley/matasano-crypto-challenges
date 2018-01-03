@@ -266,15 +266,30 @@ func makeCBCAdminCookie(generateCookie func(string) string) string {
 
 	// justify "0123456789ABCDEF"
 	desired := "AA;role=admin;AA"
-	userDataBuf := strings.Repeat("?", 16*2)
+
+	// We need to pad the prefix so that it aligns on a block boundary
+	paddingLength := (16 - len(prefix)%16) % 16
+
+	userDataBuf := strings.Repeat("?", paddingLength+16*2)
 
 	out := generateCookie(userDataBuf)
 
-	leadingSlice := out[:len(prefix)]
-	targetBlock := out[len(prefix) : len(prefix)+16]
-	trailingSlice := out[len(prefix)+16:]
+	leadingSlice := out[:paddingLength+len(prefix)]                              // the blocks containing the prefix and padding
+	targetBlock := out[paddingLength+len(prefix) : paddingLength+len(prefix)+16] // the block to attack
+	trailingSlice := out[paddingLength+len(prefix)+16:]                          // the rest of the blocks
 
 	// Insert our attack text into the block
+	// pt1: PPPPPPPPPPPPPPPP PPPPPPPPP??????? AAAAAAAAAAAAAAAA AAAAAAAAAAAAAAAA
+	// ct1: 1111111111111111 2222222222222222 3333333333333333 4444444444444444
+	// tgt:                                                    AA;admin=true;AA
+	// msg: 1111111111111111 2222222222222222 (AAAAAAAAAAAAAAAA ^ AA;admin=true;AA) 4444444444444444
+	// pt2: PPPPPPPPPPPPPPPP PPPPPPPPP??????? !!!!!!!!!!!!!!!! (AAAAAAAAAAAAAAAA ^ (AAAAAAAAAAAAAAAA ^ AA;admin=true;AA))
+	//
+	// in CBC mode, a 1-bit error in a ciphertext block:
+	// * Completely scrambles the block the error occurs in
+	// * Produces the identical 1-bit error(/edit) in the next ciphertext block.
+	//
+	// pt2 will contain the desired attack text, since XORing twice is the identity operation.
 	targetBlock = xorString(targetBlock, xorString(strings.Repeat("?", 16), desired))
 
 	return leadingSlice + targetBlock + trailingSlice
