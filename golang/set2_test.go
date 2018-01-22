@@ -23,7 +23,7 @@ func TestChallenge10(t *testing.T) {
 	out, err := blockCipher.decrypt(cipherText)
 	fatalIfErr(t, err)
 	plainText := readFile(t, "../outputs/6.txt")
-	assertEqual(t, plainText, out)
+	assertEqual(t, plainText, unpadPKCS7(out))
 
 	// Try going the other way
 	b64CipherText := string(readFile(t, "../inputs/10.txt"))

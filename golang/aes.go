@@ -117,7 +117,7 @@ func (c *AESCBCBlockCipher) decrypt(cipherText []byte) ([]byte, error) {
 	// using crypto/hmac) before being decrypted in order to avoid creating
 	// a padding oracle.
 
-	return unpadPKCS7(plainText), nil
+	return plainText, nil
 }
 
 func (c *AESCBCBlockCipher) encrypt(plainText []byte) ([]byte, error) {

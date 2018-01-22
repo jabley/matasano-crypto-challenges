@@ -30,8 +30,12 @@ func isPKCS7Padded(buf []byte, bs int) bool {
 	// Read the last byte
 	padding := buf[n-1]
 
-	// Check that it's an int below block size
-	if !(int(padding) > 0 && int(padding) < bs) {
+	// Check that it's a positive int less than or equal to block size
+	if !(int(padding) > 0 && int(padding) <= bs) {
+		return false
+	}
+
+	if n-int(padding) < 0 {
 		return false
 	}
 
