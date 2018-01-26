@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/aes"
 	"fmt"
 	"testing"
 )
@@ -53,4 +54,13 @@ func TestChallenge17(t *testing.T) {
 		out := encryptMessage()
 		assertEqual(t, test.expected, string(unpadPKCS7(attackCBCPadding(out, isValidPadding))))
 	}
+}
+
+func TestChallenge18(t *testing.T) {
+	ct := decodeBase64(t, "L77na/nrFsKvynd6HzOoG7GHTLXsTVu9qvY/2syLXzhPweyyMTJULu/6/kXX0KSvoOLSFQ==")
+	key, err := aes.NewCipher([]byte("YELLOW SUBMARINE"))
+	fatalIfErr(t, err)
+	nonce := make([]byte, 8)
+	res := decryptCTR(key, ct, nonce)
+	assertEqual(t, "Yo, VIP Let's kick it Ice, Ice, baby Ice, Ice, baby ", string(res))
 }

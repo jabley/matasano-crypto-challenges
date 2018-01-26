@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"crypto/aes"
+	"crypto/cipher"
+	"encoding/binary"
 )
 
 func newCBCPaddingOracle(plainText []byte) (
@@ -128,4 +130,25 @@ func attackCBCPadding(encrypted []byte, isValidPadding func([]byte) bool) []byte
 	}
 
 	return plainText
+}
+
+func decryptCTR(b cipher.Block, ct, nonce []byte) []byte {
+	var out []byte
+
+	if len(nonce) >= b.BlockSize() {
+		panic("nonce cannot be larger than the block size")
+	}
+
+	src, dst := make([]byte, b.BlockSize()), make([]byte, b.BlockSize())
+	copy(src, nonce)
+
+	for i := 0; i < len(ct); i += b.BlockSize() {
+		b.Encrypt(dst, src)
+		out = append(out, xor(dst, ct[i:])...)
+
+		// Increment the 64 bit little endian block count
+		binary.LittleEndian.PutUint64(src[8:], binary.LittleEndian.Uint64(src[8:])+1)
+	}
+
+	return out
 }
