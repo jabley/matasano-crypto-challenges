@@ -5,6 +5,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/binary"
+	"fmt"
 )
 
 func newCBCPaddingOracle(plainText []byte) (
@@ -151,4 +152,54 @@ func decryptCTR(b cipher.Block, ct, nonce []byte) []byte {
 	}
 
 	return out
+}
+
+var encryptCtr = decryptCTR
+
+func findFixedNonceKeyBySubstitution(plaintexts, ciphertext [][]byte) []byte {
+	res := make([]byte, 0)
+
+	for i := 0; i < 16; i++ {
+		bestScore, byteScore := 0, 0
+		var bestGuess byte
+
+		for guess := 0; guess < 256; guess++ {
+			byteScore = 0
+
+			for _, ct := range ciphertext {
+				plain := ct[i] ^ byte(guess)
+				if isEnglishCharacter(plain) {
+					byteScore++
+				}
+			}
+
+			if byteScore > bestScore {
+				bestScore = byteScore
+				bestGuess = byte(guess)
+			}
+		}
+
+		res = append(res, bestGuess)
+	}
+	// for i, text := range plaintexts {
+	// 	res = make([]byte, 0)
+	// 	for j := 0; j < 16; j++ {
+	// 		guess := text[j] ^ ciphertext[i][j]
+	// 		res = append(res, guess)
+	// 	}
+
+	// 	println(fmt.Sprintf("From plain text %d, guess is %v", i, res))
+
+	// 	res = make([]byte, 0)
+	// 	for j := 16; j < 32; j++ {
+	// 		guess := text[j] ^ ciphertext[i][j]
+	// 		res = append(res, guess)
+	// 	}
+
+	// 	println(fmt.Sprintf("From plain text %d, guess is %v", i, res))
+	// }
+
+	println(fmt.Sprintf("guess is %v", res))
+
+	return res
 }

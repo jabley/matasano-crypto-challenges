@@ -3,7 +3,7 @@ package main
 import "unicode"
 
 func isEnglishCharacter(c byte) bool {
-	return isAlpha(c) || isSpace(c) || isDigit(c)
+	return isAlpha(c) || isSpace(c) || isDigit(c) || isPunctuation(c)
 }
 
 func isDigit(c byte) bool {
