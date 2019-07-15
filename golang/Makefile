@@ -7,8 +7,6 @@ fmt:
 
 test:
 	go test -coverprofile crypto.coverprofile
-	# rewrite the generated .coverprofile files so that you can run the command
-	# go tool cover -html=.matasano.coverprofile
 	find . -name '*.coverprofile' -type f -exec sed -i '' 's|_'$(CURDIR)'|\.|' {} \;
 
 coverage:
